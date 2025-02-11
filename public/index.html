@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Messaging App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    .message-container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .message {
+      padding: 10px;
+      border: 1px solid #ddd;
+      margin-bottom: 10px;
+      border-radius: 5px;
+    }
+    .message .sender {
+      font-weight: bold;
+    }
+    .message .timestamp {
+      font-size: 0.8em;
+      color: #666;
+    }
+    form {
+      margin-bottom: 20px;
+    }
+    input, textarea, button, select {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <div class="message-container">
+    <h1>Messaging App</h1>
+
+    <!-- Login/Register Form -->
+    <div id="authForm">
+      <input type="text" id="username" placeholder="Username" required>
+      <input type="password" id="password" placeholder="Password" required>
+      <button id="loginBtn">Login</button>
+      <button id="registerBtn">Register</button>
+    </div>
+
+    <!-- Message Form (hidden by default) -->
+    <form id="messageForm" style="display: none;">
+      <select id="recipient" required>
+        <option value="">Select a recipient</option>
+      </select>
+      <textarea id="content" placeholder="Your message" rows="4" required></textarea>
+      <button type="submit">Send Message</button>
+    </form>
+
+    <!-- List of messages -->
+    <div id="messages"></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const authForm = document.getElementById('authForm');
+    const messageForm = document.getElementById('messageForm');
+    const messagesDiv = document.getElementById('messages');
+    const socket = io();
+
+    let token = '';
+
+    // Function to display messages
+    function displayMessage(message) {
+      const messageElement = document.createElement('div');
+      messageElement.className = 'message';
+      messageElement.innerHTML = `
+        <div class="sender">${message.username}</div>
+        <div class="content">${message.content}</div>
+        <div class="timestamp">${new Date(message.timestamp).toLocaleTimeString()}</div>
+      `;
+      messagesDiv.appendChild(messageElement);
+    }
+
+    // Fetch and display messages
+    async function fetchMessages() {
+      const response = await fetch('/messages', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const messages = await response.json();
+      messagesDiv.innerHTML = '';
+      messages.forEach(displayMessage);
+    }
+
+    // Fetch and populate the recipient dropdown
+    async function fetchUsers() {
+      const response = await fetch('/users', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const users = await response.json();
+      const recipientSelect = document.getElementById('recipient');
+      recipientSelect.innerHTML = '<option value="">Select a recipient</option>';
+      users.forEach((user) => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = user.username;
+        recipientSelect.appendChild(option);
+      });
+    }
+
+    // Login
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const response = await fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        token = data.token;
+        authForm.style.display = 'none';
+        messageForm.style.display = 'block';
+        fetchMessages();
+        fetchUsers(); // Fetch and populate recipients
+      } else {
+        alert(data.message);
+      }
+    });
+
+    // Register
+    document.getElementById('registerBtn').addEventListener('click', async () => {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const response = await fetch('/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await response.json();
+      alert(data.message);
+    });
+
+    // Send a message
+    messageForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const recipient = document.getElementById('recipient').value;
+      const content = document.getElementById('content').value;
+      const response = await fetch('/send-message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ recipient, content }),
+      });
+      if (response.ok) {
+        document.getElementById('content').value = '';
+      }
+    });
+
+    // Receive new messages in real-time
+    socket.on('newMessage', (message) => {
+      displayMessage(message);
+    });
+  </script>
+</body>
+</html>
